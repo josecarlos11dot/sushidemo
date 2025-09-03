@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sushi To Go — Simulación WhatsApp</title>
+<style>
+  :root {
+    --panel:#111b21; --ink:#e9edef; --muted:#8696a0;
+    --bubble-me:#005c4b; --bubble-other:#202c33;
+    --chip:#2a3942; --chip-b:#32444c; --chip-ink:#cfe5d0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--panel);color:var(--ink);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+  .header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#202c33;position:sticky;top:0;z-index:10;border-bottom:1px solid #1f2c33}
+  .header img{width:36px;height:36px;border-radius:999px;object-fit:cover}
+  .header .name{font-weight:600}
+  .header .status{font-size:12px;color:var(--muted)}
+  .wrap{max-width:900px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column}
+  .chat{flex:1;padding:16px 12px 96px}
+  .row{display:flex;margin:6px 0}
+  .bubble{max-width:78%;padding:10px 12px;border-radius:12px;position:relative}
+  .other .bubble{background:var(--bubble-other);border-top-left-radius:4px}
+  .me .bubble{margin-left:auto;background:var(--bubble-me);border-top-right-radius:4px}
+  .time{display:block;margin-top:6px;font-size:11px;color:#cbd5db;opacity:.9}
+  .typing{display:inline-flex;gap:4px;padding:6px 8px;border-radius:12px;background:var(--bubble-other)}
+  .dot{width:6px;height:6px;border-radius:50%;background:#cbd5db;opacity:.6;animation:blink 1.2s infinite}
+  .dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
+  @keyframes blink{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-2px);opacity:1}}
+  .tpl .opts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .tpl .opts .opt{background:var(--chip); color:var(--chip-ink); border:1px solid var(--chip-b); padding:8px 10px; border-radius:999px; font-size:13px; cursor:pointer;}
+  .hint{color:var(--muted);font-size:12px;margin:6px 2px 96px}
+
+  dialog#imgModal{position:fixed; inset:0; margin:auto; width:min(92vw,720px); padding:0; border:0; background:transparent; z-index:99999;}
+  dialog#imgModal::backdrop{background:rgba(0,0,0,.6)}
+  .modal-wrap{position:relative}
+  .modal-wrap img{display:block;width:100%;height:auto;border-radius:10px}
+  .close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);color:#fff;border:0;border-radius:999px;width:36px;height:36px;cursor:pointer;font-size:18px;}
+
+  .composer{position: fixed; left: 0; right: 0; bottom: 0; background:#202c33; border-top:1px solid #1f2c33; padding:10px;}
+  .composer form{ display:flex; gap:8px; max-width:900px; margin:0 auto; }
+  .composer input{ flex:1; background:#111b21; color:#e9edef; border:1px solid #2a3942; border-radius:999px; padding:10px 14px; outline:none; }
+  .composer button{ border:1px solid #32444c; background:#2a3942; color:#cfe5d0; padding:10px 14px; border-radius:999px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <img src="img/logo.jpg" alt="Sushi To Go" />
+    <div>
+      <div class="name">SushiBot 🍣</div>
+      <div class="status" id="status">en línea</div>
+    </div>
+  </div>
+
+  <div class="chat" id="chat"></div>
+  <div class="hint">Tip: para que POS y WhatsApp se hablen entre <b>dispositivos</b>, usa el mismo <code>?chan=</code> en la URL (ej. <code>?chan=demo1</code>) y configura Firebase abajo.</div>
+</div>
+
+<div class="composer">
+  <form id="sendForm" autocomplete="off">
+    <input id="msg" type="text" placeholder="Escribe un mensaje… (ej. '2 paquete 4 empanizado sin cebolla')" />
+    <button type="submit">Enviar</button>
+  </form>
+</div>
+
+<dialog id="imgModal">
+  <div class="modal-wrap">
+    <button class="close" aria-label="Cerrar">✕</button>
+    <img id="modalImg" alt="Vista de menú" />
+  </div>
+</dialog>
+
+<!-- Firebase (cross-device) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<script>
+  // ===== Transporte cross-device: Firestore (fallback a BroadcastChannel) =====
+  // ✅ correcto
+const firebaseConfig = {
+  apiKey: "AIzaSyCTApWeBTsupSe6KpgITiHOHTwSMnifGCM",
+  authDomain: "sushidemo-82f4a.firebaseapp.com",
+  projectId: "sushidemo-82f4a",
+  storageBucket: "sushidemo-82f4a.firebasestorage.app",
+  messagingSenderId: "1063433432341",
+  appId: "1:1063433432341:web:1166f95f013e477e498d1c",
+  measurementId: "G-XJFYXWQX6T"
+};
+
+
+  const myId = (localStorage.getItem('sid') || (localStorage.setItem('sid', (self.crypto?.randomUUID?.()||String(Math.random())).slice(0,8)), localStorage.getItem('sid')));
+  const chan = new URLSearchParams(location.search).get('chan') || 'sushi-demo';
+
+  let sendEvent, subscribeEvents;
+  (function setupTransport(){
+    try{
+      if(firebaseConfig.apiKey && !/TU_API_KEY/.test(firebaseConfig.apiKey)){
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const ref = db.collection('channels').doc(chan).collection('events');
+        sendEvent = (data)=> ref.add({...data, from: myId, ts: firebase.firestore.FieldValue.serverTimestamp()});
+        subscribeEvents = (cb)=> ref.orderBy('ts').onSnapshot(s=>{
+          s.docChanges().forEach(c=>{
+            if(c.type!=='added') return;
+            const ev=c.doc.data(); if(ev.from===myId) return;
+            cb(ev);
+          });
+        });
+        console.log('[transport] Firestore');
+      }else{
+        throw new Error('No firebaseConfig, using BroadcastChannel');
+      }
+    }catch(_e){
+      const bc = new BroadcastChannel(chan);
+      sendEvent = (d)=> bc.postMessage(d);
+      subscribeEvents = (cb)=> bc.onmessage=(e)=> cb(e.data);
+      console.log('[transport] BroadcastChannel');
+    }
+  })();
+</script>
+
+<script>
+  // ===== UI de chat =====
+  const chat = document.getElementById('chat');
+  const fmt = () => new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  function addRow(side, html){
+    const row = document.createElement('div'); row.className = 'row '+side;
+    const b = document.createElement('div'); b.className = 'bubble';
+    b.innerHTML = html + `<span class="time">${fmt()}</span>`;
+    row.appendChild(b); chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
+    return b;
+  }
+  function typing(show=true){
+    let el = document.getElementById('typing');
+    if(show){
+      if(el) return;
+      const row = document.createElement('div'); row.id='typing'; row.className='row other';
+      row.innerHTML = '<div class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+      chat.appendChild(row);
+    } else if(el) el.remove();
+    chat.scrollTop = chat.scrollHeight;
+  }
+  function botTemplate(text, options=[]){
+    return addRow('other', `<div class="tpl">${text}${options.length ? `<div class="opts">${options.map(o=>`<button class="opt" data-val="${o.val}">${o.label}</button>`).join('')}</div>`:''}</div>`);
+  }
+  async function showImageFlow(src){
+    addRow('me','Ver imagen 📷');
+    typing(true);
+    try{
+      await new Promise((ok,fail)=>{ const t=new Image(); t.onload=ok; t.onerror=()=>fail(); t.src=src; });
+      setTimeout(()=>{
+        typing(false);
+        addRow('other','Enviando imagen… ✅');
+        const modal=document.getElementById('imgModal'), img=document.getElementById('modalImg');
+        img.src = src; img.loading='lazy'; modal.showModal();
+      }, 400);
+    }catch{ typing(false); addRow('other','⚠️ No pude abrir la imagen.'); }
+  }
+
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.opt'); if(!btn) return;
+    const v = btn.dataset.val;
+    addRow('me', btn.textContent);
+
+    switch(v){
+      case 'ver_menu':  showImageFlow('img/menu.jpg'); break;
+      case 'ver_packs': showImageFlow('img/packs.jpg'); break;
+      case 'hacer_pedido':
+        typing(true);
+        setTimeout(()=>{
+          typing(false);
+          botTemplate('Elige un paquete para crear tu pedido:', [
+            {label:'Paquete 1', val:'p1'},
+            {label:'Paquete 2', val:'p2'},
+            {label:'Paquete 3', val:'p3'},
+            {label:'Paquete 4', val:'p4'},
+          ]);
+        }, 400);
+        break;
+      case 'p1': case 'p2': case 'p3': case 'p4': {
+        const mapa = {p1:'Paquete 1', p2:'Paquete 2', p3:'Paquete 3', p4:'Paquete 4'};
+        const texto = mapa[v] || 'Paquete';
+        sendEvent({ type:'client_msg', text: texto });
+        typing(true);
+        setTimeout(()=>{ typing(false); addRow('other','✅ Pedido recibido. Te aviso cada etapa.'); }, 500);
+        break;
+      }
+      case 'tiempo':
+        typing(true);
+        setTimeout(()=>{ typing(false); addRow('other','⏱️ Tiempo estimado: 25–35 min.'); }, 350);
+        break;
+    }
+  });
+
+  document.getElementById('sendForm').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const inp = document.getElementById('msg');
+    const text = (inp.value || '').trim();
+    if(!text) return;
+    addRow('me', text);
+    sendEvent({ type:'client_msg', text });
+    inp.value = '';
+    typing(true);
+    setTimeout(()=>{ typing(false); addRow('other','✅ Pedido recibido. Te aviso cada etapa.'); }, 500);
+  });
+
+  (function(){
+    const modal=document.getElementById('imgModal');
+    modal.addEventListener('click',(e)=>{ if(e.target===modal || e.target.classList.contains('close')) modal.close(); });
+    document.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && modal.open) modal.close(); });
+  })();
+
+  // Recibe actualizaciones desde POS (sólo pos_update)
+  subscribeEvents?.((ev)=>{
+    if(ev.type==='pos_update' && ev.text){
+      addRow('other', ev.text);
+    }
+  });
+
+  botTemplate('¡Hola! Soy SushiBot 🍣 ¿Qué deseas hacer hoy?', [
+    {label:'Ver menú',     val:'ver_menu'},
+    {label:'Ver paquetes', val:'ver_packs'},
+    {label:'Hacer pedido', val:'hacer_pedido'},
+    {label:'¿Tiempo?',     val:'tiempo'},
+  ]);
+</script>
+</body>
+</html>

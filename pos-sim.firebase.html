@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sushi To Go — POS Simulado</title>
+<style>
+  :root {
+    --bg:#0b1220; --panel:#0f1629; --ink:#e8ecf6; --muted:#9aa5b1; --line:#202b44;
+    --accent-wa:#25D366; --accent-site:#60a5fa;
+  }
+  * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.4 system-ui,Segoe UI,Roboto,Inter,Arial; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:10;}
+  header .brand { display:flex; align-items:center; gap:12px; } header img { width:36px; height:36px; border-radius:6px; object-fit:cover; }
+  .mini { font-size:12px; color:var(--muted); } .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+  .pane { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; } h2 { margin:6px 0 12px; font-size:16px; }
+  .btn { padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#121a33; color:var(--ink); cursor:pointer; } .btn:hover { filter:brightness(1.1); }
+
+  .order { border:1px dashed var(--line); border-radius:10px; padding:10px; background:#0b1220; position:relative; } .order + .order { margin-top:10px; }
+  .order .ttl { font-weight:700; } .status { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; margin-left:6px; }
+  .s-pend { background:#1f2937; color:#cbd5e1; } .s-prep { background:#1e293b; color:#93c5fd; } .s-listo { background:#172554; color:#a5b4fc; } .s-entregado { background:#052e16; color:#86efac; }
+  .sub { color:var(--muted); font-size:12px; } .lines { margin:8px 0; padding-left:18px; color:var(--ink); } .lines li { margin:2px 0; }
+  .lines .mods{ color:#9aa5b1; font-size:12px; margin-left:6px; } .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .tag { background:#0b1220; border:1px solid var(--line); padding:6px 8px; border-radius:999px; font-size:12px; color:#c7d2fe; } .actions { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .order.src-wa{ border-left:4px solid var(--accent-wa);} .order.src-site{ border-left:4px solid var(--accent-site);}
+
+  dialog#builderModal{ position:fixed; inset:0; margin:auto; width:min(96vw, 980px); height:min(92vh, 680px); border:0; padding:0; background:transparent; z-index:99999;}
+  dialog#builderModal::backdrop{ background:rgba(0,0,0,.6);} .builder{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px; height:100%; display:grid; grid-template-columns: 1fr 360px; gap:12px; }
+  .bcol{ background:#0b1220; border:1px solid var(--line); border-radius:10px; padding:10px; } .bhead{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; } .quick{ padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#121a33; color:var(--ink); cursor:pointer; }
+  .builder .bcol:last-child{ background:#0e1730; border-color:#2c3a5e; } .cart-list{ display:flex; flex-direction:column; gap:10px; }
+  .cart-row{ background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border:1px solid #2e3b62; border-radius:12px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:#eef3ff; box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 6px 16px rgba(0,0,0,.20); }
+  .cart-row:hover{ background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04)); } .cart-row>div:first-child{ font-weight:700; letter-spacing:.2px; color:#f3f6ff; }
+  .qtygrp{ display:flex; align-items:center; gap:8px; } .qtygrp strong{ min-width:2.2ch; text-align:center; font-variant-numeric:tabular-nums; color:#f3f7ff; background:#0b1220; border:1px solid #2e3b62; border-radius:8px; padding:2px 8px;}
+  .qtygrp .btn{ padding:4px 10px; line-height:1; border-radius:8px; background:#1b2a4a; border-color:#3a4a75; color:#e8ecf6; box-shadow:0 1px 0 rgba(255,255,255,.06) inset; } .qtygrp .btn:hover{ background:#21345c; filter:none; }
+  #cartEmpty{ color:#b9c4d6; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="img/logo.jpg" alt="logo" />
+      <div>
+        <div style="font-weight:700">POS — Sushi To Go</div>
+        <div class="mini">Usa el mismo <code>?chan=</code> en la URL de POS y WhatsApp para enlazarlos (ej. <code>?chan=demo1</code>).</div>
+      </div>
+    </div>
+    <button id="openBuilder" class="btn">➕ Nueva orden (Sitio)</button>
+  </header>
+
+  <main class="wrap">
+    <section class="pane">
+      <h2>Órdenes activas</h2>
+      <div id="list"></div>
+
+      <div class="hist">
+        <h2>Historial (últimas 5)</h2>
+        <div id="histList" class="folders"></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="builderModal">
+    <div class="builder">
+      <div class="bcol">
+        <div class="bhead">
+          <h2 style="margin:0">Atajos de pedido (Sitio)</h2>
+          <button class="btn" id="closeBuilder">Cerrar</button>
+        </div>
+        <div class="grid" id="quickGrid">
+          <button class="quick" data-item="Paquete 1">Paquete 1</button>
+          <button class="quick" data-item="Paquete 2">Paquete 2</button>
+          <button class="quick" data-item="Paquete 3">Paquete 3</button>
+          <button class="quick" data-item="Paquete 4">Paquete 4</button>
+          <button class="quick" data-item="Yakimeshi">Yakimeshi</button>
+          <button class="quick" data-item="Gohan">Gohan</button>
+        </div>
+        <p class="mini" style="margin-top:8px">Referencia: <a class="btn" href="img/menu.jpg" target="_blank" style="padding:6px 10px">Menú</a> <a class="btn" href="img/packs.jpg" target="_blank" style="padding:6px 10px">Paquetes</a></p>
+      </div>
+      <div class="bcol">
+        <h2 style="margin:0 0 8px">Carrito (Sitio)</h2>
+        <div id="cartList" class="cart-list"></div>
+        <div id="cartEmpty" class="mini">Sin artículos. Usa los atajos para agregar.</div>
+        <div class="cart-actions">
+          <button id="createOrder" class="btn">Crear orden</button>
+          <button id="clearCart" class="btn" style="border-color:#3b1d1d;">Vaciar</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+<!-- Firebase (cross-device) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<script>
+  // ===== Transporte cross-device =====
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_PROYECTO.firebaseapp.com",
+    projectId: "TU_PROYECTO",
+  };
+  const myId = (localStorage.getItem('sid') || (localStorage.setItem('sid', (self.crypto?.randomUUID?.()||String(Math.random())).slice(0,8)), localStorage.getItem('sid')));
+  const chan = new URLSearchParams(location.search).get('chan') || 'sushi-demo';
+  let sendEvent, subscribeEvents;
+  (function setupTransport(){
+    try{
+      if(firebaseConfig.apiKey && !/TU_API_KEY/.test(firebaseConfig.apiKey)){
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const ref = db.collection('channels').doc(chan).collection('events');
+        sendEvent = (data)=> ref.add({...data, from: myId, ts: firebase.firestore.FieldValue.serverTimestamp()});
+        subscribeEvents = (cb)=> ref.orderBy('ts').onSnapshot(s=>{
+          s.docChanges().forEach(c=>{
+            if(c.type!=='added') return;
+            const ev=c.doc.data(); if(ev.from===myId) return;
+            cb(ev);
+          });
+        });
+        console.log('[transport] Firestore');
+      }else{
+        throw new Error('No firebaseConfig, using BroadcastChannel');
+      }
+    }catch(_e){
+      const bc = new BroadcastChannel(chan);
+      sendEvent = (d)=> bc.postMessage(d);
+      subscribeEvents = (cb)=> bc.onmessage=(e)=> cb(e.data);
+      console.log('[transport] BroadcastChannel');
+    }
+  })();
+</script>
+
+<script>
+  // ==== Modal constructor ====
+  const builderModal = document.getElementById('builderModal');
+  document.getElementById('openBuilder').addEventListener('click', () => builderModal.showModal());
+  document.getElementById('closeBuilder').addEventListener('click', () => builderModal.close());
+
+  // ==== Carrito ====
+  const cart = { items: [] };
+  const cartList  = document.getElementById('cartList');
+  const cartEmpty = document.getElementById('cartEmpty');
+  const createOrderBtn = document.getElementById('createOrder');
+  const clearCartBtn   = document.getElementById('clearCart');
+
+  function addToCart(name){ const f=cart.items.find(x=>x.name===name); if(f) f.qty+=1; else cart.items.push({name,qty:1}); renderCart(); }
+  function changeQty(name,delta){ const it=cart.items.find(x=>x.name===name); if(!it) return; it.qty+=delta; if(it.qty<=0) cart.items=cart.items.filter(x=>x!==it); renderCart(); }
+  function clearCart(){ cart.items=[]; renderCart(); }
+  function renderCart(){
+    cartList.innerHTML='';
+    if(cart.items.length===0){ cartEmpty.style.display='block'; return; }
+    cartEmpty.style.display='none';
+    cart.items.forEach(it=>{
+      const row=document.createElement('div'); row.className='cart-row';
+      row.innerHTML=`<div>${it.name}</div>
+        <div class="qtygrp">
+          <button class="btn" data-delta="-1" data-name="${it.name}">−</button>
+          <strong>${it.qty}</strong>
+          <button class="btn" data-delta="1" data-name="${it.name}">+</button>
+        </div>`;
+      cartList.appendChild(row);
+    });
+  }
+  document.getElementById('quickGrid').addEventListener('click',(e)=>{ const b=e.target.closest('.quick'); if(!b) return; addToCart(b.dataset.item); });
+  cartList.addEventListener('click',(e)=>{ const btn=e.target.closest('button.btn'); if(!btn) return; changeQty(btn.getAttribute('data-name'), Number(btn.getAttribute('data-delta'))); });
+  clearCartBtn.addEventListener('click', clearCart);
+
+  // ---------- Parser de texto ----------
+  function _norm(s){ return (s||"").toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w#\s\.]/g,' ').replace(/\s+/g,' ').trim(); }
+  const MENU_KEYS=[
+    {name:'Paquete 1', keys:['paquete 1','p1','paq 1','paq1','#1','no 1','numero 1','uno']},
+    {name:'Paquete 2', keys:['paquete 2','p2','paq 2','paq2','#2','no 2','numero 2','dos']},
+    {name:'Paquete 3', keys:['paquete 3','p3','paq 3','paq3','#3','no 3','numero 3','tres']},
+    {name:'Paquete 4', keys:['paquete 4','p4','paq 4','paq4','#4','no 4','numero 4','cuatro']},
+    {name:'Yakimeshi', keys:['yakimeshi','arroz','arroz frito']},
+    {name:'Gohan', keys:['gohan','arroz blanco']},
+  ];
+  const ING=['cebolla','salsa','soya','soja','aguacate','mayonesa','picante','queso','queso crema','ajo','jengibre'];
+
+  function _detectQty(txt){ let m=txt.match(/(?:\bx\s*|\bpor\s*)(\d{1,2})\b/); if(m) return {qty:+m[1], rest:txt.replace(m[0],'')};
+    m=txt.match(/\b(\d{1,2})\s*(paquetes?|ords?|orden(es)?|pz|pzas?)\b/); if(m) return {qty:+m[1], rest:txt.replace(m[0],'')};
+    m=txt.match(/^\s*(\d{1,2})\b/); if(m) return {qty:+m[1], rest:txt.replace(m[0],'')}; return {qty:1, rest:txt}; }
+  function _detectItem(txt){
+    for(const it of MENU_KEYS){ for(const k of it.keys){ const re=new RegExp(`\\b${k.replace(/\s+/g,'\\s*')}\\b`,'i'); if(re.test(txt)) return {name:it.name, rest:txt.replace(re,'')}; } }
+    const m=txt.match(/\bpaq(?:uete)?\s*([1-9])\b/); if(m) return {name:`Paquete ${m[1]}`, rest:txt.replace(m[0],'')};
+    return {name:null, rest:txt};
+  }
+  function _detectMods(txt){
+    const mods=[];
+    if(/\bempanizad[oa]?\b/.test(txt)){ mods.push('empanizado'); txt=txt.replace(/\bempanizad[oa]?\b/g,''); }
+    txt=txt.replace(/\bsin\s+([a-zñáéíóú ]{2,20})\b/gi,(_,x)=>{ const n=_norm(x); const f=ING.find(k=>n.includes(_norm(k))); if(f) mods.push('sin '+f); return ' '; });
+    txt=txt.replace(/\b(extra|con)\s+([a-zñáéíóú ]{2,20})\b/gi,(_,__,x)=>{ const n=_norm(x); const f=ING.find(k=>n.includes(_norm(k))); if(f) mods.push('extra '+f); return ' '; });
+    return {mods, rest:txt};
+  }
+  function parseOrderText(text){
+    let t=_norm(text), out=[]; const chunks=t.split(/[,;\/]+/);
+    for(let raw of chunks){ raw=(raw||'').trim(); if(!raw) continue;
+      let {qty,rest}=_detectQty(raw); let {name,rest:r2}=_detectItem(rest); rest=r2;
+      const {mods,rest:r3}=_detectMods(rest); rest=r3.trim();
+      if(name) out.push({name,qty,mods}); else out.push({name: raw||'Pedido', qty: qty||1, mods: []});
+    } return {lines: out, confidence: out.length?0.8:0};
+  }
+
+  // ==== Órdenes y Historial ====
+  let seq=1; const list=document.getElementById('list'); const histList=document.getElementById('histList'); const finished=[];
+  function mkOrder({desc, lines=[], source='site'}){
+    const id='ORD-'+String(seq++).padStart(3,'0'); const el=document.createElement('div');
+    el.className='order '+(source==='whatsapp'?'src-wa':'src-site'); el.dataset.status='pendiente'; el.dataset.source=source;
+    const ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const linesHtml = lines.length ? `<ul class="lines">${lines.map(li=>{ const mods=li.mods&&li.mods.length?` <span class="mods">(${li.mods.join(', ')})</span>`:''; return `<li>${li.qty} × ${li.name}${mods}</li>`; }).join('')}</ul>` : `<ul class="lines"><li>${desc}</li></ul>`;
+    el.innerHTML = `<div class="ttl">${source==='whatsapp'?'Cliente (WhatsApp)':'Cliente (Sitio)'} <span class="status s-pend">Pendiente</span></div>
+      <div class="sub">#${id} · Recibido: <span class="ts">${ts}</span></div>${linesHtml}
+      <div class="tags"></div>
+      <div class="actions">
+        <button class="btn act" data-act="preparacion">En preparación</button>
+        <button class="btn act" data-act="listo">Listo para entregar</button>
+        <button class="btn act" data-act="entregado">Entregado</button>
+        <button class="btn act" data-act="cancelado" style="border-color:#3b1d1d;">Cancelar</button>
+      </div>`;
+    list.prepend(el);
+    if(source==='whatsapp'){ sendEvent({ type:'pos_update', text:`🧾 Pedido creado: ${desc}` }); }
+    return el;
+  }
+  function finalizeOrder(card,label){
+    const idTxt = card.querySelector('.sub')?.textContent||''; const source=card.dataset.source||'site';
+    finished.push({ id:idTxt.replace('Recibido','·'), source, when:new Date(), summary:label }); renderHistory(); card.remove();
+  }
+  function renderHistory(){
+    histList.innerHTML=''; const last5=finished.slice(-5).reverse();
+    last5.forEach(f=>{ const div=document.createElement('div'); div.className='folder '+(f.source==='whatsapp'?'wa':'site'); div.textContent=`📁 ${f.id} · ${f.summary}`; histList.appendChild(div); });
+  }
+
+  list.addEventListener('click', (e)=>{
+    const btn=e.target.closest('.act'); if(!btn) return;
+    const card=e.target.closest('.order'); const source=card.dataset.source; const st=card.querySelector('.status'); const tags=card.querySelector('.tags');
+    const setStatus=(cls,txt)=>{ st.className='status '+cls; st.textContent=txt; };
+    const act=btn.dataset.act; let msg=null, fin=false, finLabel='';
+    if(act==='preparacion'){ setStatus('s-prep','En preparación'); msg='🍣 Tu pedido está en preparación.'; }
+    if(act==='listo'){ setStatus('s-listo','Listo'); msg='📦 Tu pedido está listo para entregar.'; }
+    if(act==='entregado'){ setStatus('s-entregado','Entregado'); msg='✅ Pedido entregado. ¡Gracias!'; fin=true; finLabel='Entregado'; }
+    if(act==='cancelado'){ setStatus('s-pend','Cancelado'); msg='⚠️ Tu pedido fue cancelado.'; fin=true; finLabel='Cancelado'; }
+    const tag=document.createElement('span'); tag.className='tag'; tag.textContent=btn.textContent; tags.appendChild(tag);
+    if(msg && source==='whatsapp') sendEvent({ type:'pos_update', text: msg });
+    if(fin) finalizeOrder(card, finLabel);
+  });
+
+  createOrderBtn.addEventListener('click', ()=>{
+    if(cart.items.length===0) return;
+    mkOrder({ desc:'Pedido sitio', lines: cart.items.map(it=>({name:it.name, qty:it.qty, mods:[]})), source:'site' });
+    clearCart(); builderModal.close();
+  });
+
+  // ===== Suscripción a eventos desde WhatsApp =====
+  subscribeEvents?.((ev)=>{
+    if(ev.type==='client_msg'){
+      const parsed=parseOrderText(ev.text||''); 
+      if(parsed.lines && parsed.lines.length) mkOrder({ desc: ev.text, lines: parsed.lines, source:'whatsapp' });
+      else mkOrder({ desc: ev.text, lines:[{name:ev.text, qty:1, mods:[]}], source:'whatsapp' });
+    }
+  });
+</script>
+</body>
+</html>

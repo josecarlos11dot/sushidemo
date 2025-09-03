@@ -62,9 +62,8 @@
   .bcol { background:#0b1220; border:1px solid var(--line); border-radius:10px; padding:10px; }
   .bhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; }
-  .quick { padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#121a33; color:var(--ink); cursor:pointer; }
+  .quick { padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#121a33; color:#e8ecf6; cursor:pointer; }
   .quick:hover { filter:brightness(1.1); }
-  .close-x { border:1px solid var(--line); background:#121a33; color:#e8ecf6; border-radius:8px; padding:6px 10px; cursor:pointer; }
 
   /* Carrito dentro del modal (alto contraste) */
   .builder .bcol:last-child{ background:#0e1730; border-color:#2c3a5e; }
@@ -88,6 +87,14 @@
   .qtygrp .btn{ padding:4px 10px; line-height:1; border-radius:8px; background:#1b2a4a; border-color:#3a4a75; color:#e8ecf6; box-shadow:0 1px 0 rgba(255,255,255,.06) inset; }
   .qtygrp .btn:hover{ background:#21345c; filter:none; }
   #cartEmpty{ color:#b9c4d6; }
+
+  /* Especial (texto libre) */
+  .special{ margin-top:12px; padding:10px; border:1px dashed var(--line); border-radius:10px; background:#0b1220; }
+  .special .row{ display:flex; gap:8px; }
+  .special input{
+    flex:1; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+    background:#0e1730; color:#e8ecf6;
+  }
 </style>
 </head>
 <body>
@@ -99,7 +106,10 @@
         <div class="mini">Usa el mismo <code>?chan=</code> en la URL de POS y WhatsApp para enlazarlos (ej. <code>?chan=demo1</code>).</div>
       </div>
     </div>
-    <button id="openBuilder" class="btn">➕ Nueva orden (Sitio)</button>
+    <div style="display:flex; gap:8px;">
+      <button id="resetDemo" class="btn" style="border-color:#3b1d1d;">♻️ Reiniciar</button>
+      <button id="openBuilder" class="btn">➕ Nueva orden (Sitio)</button>
+    </div>
   </header>
 
   <main class="wrap">
@@ -122,14 +132,32 @@
           <button class="btn" id="closeBuilder">Cerrar</button>
         </div>
         <div class="grid" id="quickGrid">
+          <!-- Paquetes -->
           <button class="quick" data-item="Paquete 1">Paquete 1</button>
           <button class="quick" data-item="Paquete 2">Paquete 2</button>
           <button class="quick" data-item="Paquete 3">Paquete 3</button>
           <button class="quick" data-item="Paquete 4">Paquete 4</button>
+
+          <!-- Rolls comunes -->
+          <button class="quick" data-item="California">California</button>
+          <button class="quick" data-item="Philadelphia">Philadelphia</button>
+          <button class="quick" data-item="Avocado">Avocado</button>
+          <button class="quick" data-item="Empanizado">Empanizado</button>
+
+          <!-- Otros -->
           <button class="quick" data-item="Yakimeshi">Yakimeshi</button>
           <button class="quick" data-item="Gohan">Gohan</button>
         </div>
-        <p class="mini" style="margin-top:8px">Referencia: <a class="btn" href="img/menu.jpg" target="_blank" style="padding:6px 10px">Menú</a> <a class="btn" href="img/packs.jpg" target="_blank" style="padding:6px 10px">Paquetes</a></p>
+
+        <!-- Especiales (texto libre) -->
+        <div class="special">
+          <label for="specialText" class="mini" style="display:block; margin-bottom:6px;">Especial (texto libre)</label>
+          <div class="row">
+            <input id="specialText" type="text" placeholder='ej. "2 California sin cebolla" o "3 Gohan"' />
+            <button id="addSpecial" class="btn">Agregar</button>
+          </div>
+          <p class="mini" style="margin-top:6px">Tip: puedes escribir cantidad al inicio. También entiende “sin/extra …”.</p>
+        </div>
       </div>
       <div class="bcol">
         <h2 style="margin:0 0 8px">Carrito (Sitio)</h2>
@@ -149,20 +177,16 @@
 
 <script>
   // ===== Transporte cross-device =====
- // Pega ESTO en lugar del placeholder:
-// ✅ correcto
-const firebaseConfig = {
-  apiKey: "AIzaSyCTApWeBTsupSe6KpgITiHOHTwSMnifGCM",
-  authDomain: "sushidemo-82f4a.firebaseapp.com",
-  projectId: "sushidemo-82f4a",
-  storageBucket: "sushidemo-82f4a.firebasestorage.app",
-  messagingSenderId: "1063433432341",
-  appId: "1:1063433432341:web:1166f95f013e477e498d1c",
-  measurementId: "G-XJFYXWQX6T"
-};
+  const firebaseConfig = {
+    apiKey: "AIzaSyCTApWeBTsupSe6KpgITiHOHTwSMnifGCM",
+    authDomain: "sushidemo-82f4a.firebaseapp.com",
+    projectId: "sushidemo-82f4a",
+    storageBucket: "sushidemo-82f4a.firebasestorage.app",
+    messagingSenderId: "1063433432341",
+    appId: "1:1063433432341:web:1166f95f013e477e498d1c",
+    measurementId: "G-XJFYXWQX6T"
+  };
 
-
- 
   const myId = (localStorage.getItem('sid') || (localStorage.setItem('sid', (self.crypto?.randomUUID?.()||String(Math.random())).slice(0,8)), localStorage.getItem('sid')));
   const chan = new URLSearchParams(location.search).get('chan') || 'sushi-demo';
 
@@ -244,6 +268,39 @@ const firebaseConfig = {
   cartList.addEventListener('click',(e)=>{ const btn=e.target.closest('button.btn'); if(!btn) return; changeQty(btn.getAttribute('data-name'), Number(btn.getAttribute('data-delta'))); });
   clearCartBtn.addEventListener('click', clearCart);
 
+  // ---- Especial (texto libre) ----
+  const specialInput = document.getElementById('specialText');
+  const addSpecialBtn = document.getElementById('addSpecial');
+  function addSpecialFromText() {
+    const raw = (specialInput.value || '').trim();
+    if (!raw) return;
+
+    // Intentar parsear usando el mismo parser de WhatsApp
+    const parsed = parseOrderText(raw);
+
+    if (parsed?.lines?.length) {
+      parsed.lines.forEach(li => {
+        // si trae mods, los mostramos entre paréntesis para no perderlos visualmente
+        const display = (li.mods && li.mods.length) ? `${li.name} (${li.mods.join(', ')})` : li.name;
+        for (let i = 0; i < (li.qty || 1); i++) addToCart(display);
+      });
+    } else {
+      // fallback simple: detectar cantidad inicial (ej. "2 " o "x2 ")
+      let txt = raw, qty = 1;
+      const m = raw.match(/^\s*(?:x\s*)?(\d{1,2})\s+/i);
+      if (m) { qty = parseInt(m[1], 10) || 1; txt = raw.slice(m[0].length).trim(); }
+      if (!txt) txt = 'Especial';
+      for (let i = 0; i < qty; i++) addToCart(txt);
+    }
+
+    specialInput.value = '';
+    renderCart();
+  }
+  addSpecialBtn.addEventListener('click', addSpecialFromText);
+  specialInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addSpecialFromText(); }
+  });
+
   // ---------- Parser de texto ----------
   function _norm(s){ return (s||"").toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w#\s\.]/g,' ').replace(/\s+/g,' ').trim(); }
   const MENU_KEYS=[
@@ -253,6 +310,10 @@ const firebaseConfig = {
     {name:'Paquete 4', keys:['paquete 4','p4','paq 4','paq4','#4','no 4','numero 4','cuatro']},
     {name:'Yakimeshi', keys:['yakimeshi','arroz','arroz frito']},
     {name:'Gohan', keys:['gohan','arroz blanco']},
+    {name:'California', keys:['california']},
+    {name:'Philadelphia', keys:['philadelphia','filadelfia']},
+    {name:'Avocado', keys:['avocado','aguacate']},
+    {name:'Empanizado', keys:['empanizado']},
   ];
   const ING=['cebolla','salsa','soya','soja','aguacate','mayonesa','picante','queso','queso crema','ajo','jengibre'];
 
@@ -337,6 +398,33 @@ const firebaseConfig = {
       else mkOrder({ desc: ev.text, lines:[{name:ev.text, qty:1, mods:[]}], source:'whatsapp' });
     }
   });
+
+  // ===== Reiniciar demo (borra UI y limpia colección del canal) =====
+  async function resetDemo(){
+    // Limpiar UI
+    list.innerHTML='';
+    histList.innerHTML='';
+    finished.length = 0;
+    seq = 1;
+
+    // Borrar eventos de Firestore (para que no reaparezcan)
+    try {
+      if (firebase?.apps?.length) {
+        const db  = firebase.firestore();
+        const ref = db.collection('channels').doc(chan).collection('events');
+        const snap = await ref.get();
+        if (!snap.empty) {
+          const batch = db.batch();
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          console.log(`♻️ Eliminados ${snap.size} eventos del canal ${chan}`);
+        }
+      }
+    } catch (e) {
+      console.warn('No pude limpiar Firestore:', e);
+    }
+  }
+  document.getElementById('resetDemo').addEventListener('click', resetDemo);
 </script>
 </body>
 </html>

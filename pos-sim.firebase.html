@@ -95,40 +95,65 @@
 
 <script>
   // ===== Transporte cross-device =====
-  const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_PROYECTO.firebaseapp.com",
-    projectId: "TU_PROYECTO",
-  };
+ // Pega ESTO en lugar del placeholder:
+// ✅ correcto
+const firebaseConfig = {
+  apiKey: "AIzaSyCTApWeBTsupSe6KpgITiHOHTwSMnifGCM",
+  authDomain: "sushidemo-82f4a.firebaseapp.com",
+  projectId: "sushidemo-82f4a",
+  storageBucket: "sushidemo-82f4a.firebasestorage.app",
+  messagingSenderId: "1063433432341",
+  appId: "1:1063433432341:web:1166f95f013e477e498d1c",
+  measurementId: "G-XJFYXWQX6T"
+};
+
+
+ 
   const myId = (localStorage.getItem('sid') || (localStorage.setItem('sid', (self.crypto?.randomUUID?.()||String(Math.random())).slice(0,8)), localStorage.getItem('sid')));
   const chan = new URLSearchParams(location.search).get('chan') || 'sushi-demo';
+
   let sendEvent, subscribeEvents;
+
   (function setupTransport(){
     try{
-      if(firebaseConfig.apiKey && !/TU_API_KEY/.test(firebaseConfig.apiKey)){
+      // Asegura que las libs compat están cargadas
+      if (!firebase || !firebase.apps) throw new Error('firebase compat no cargado');
+
+      // ✅ Inicializa SIEMPRE si no hay app
+      if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const ref = db.collection('channels').doc(chan).collection('events');
-        sendEvent = (data)=> ref.add({...data, from: myId, ts: firebase.firestore.FieldValue.serverTimestamp()});
-        subscribeEvents = (cb)=> ref.orderBy('ts').onSnapshot(s=>{
-          s.docChanges().forEach(c=>{
-            if(c.type!=='added') return;
-            const ev=c.doc.data(); if(ev.from===myId) return;
-            cb(ev);
-          });
-        });
-        console.log('[transport] Firestore');
-      }else{
-        throw new Error('No firebaseConfig, using BroadcastChannel');
       }
-    }catch(_e){
+
+      // Firestore
+      const db  = firebase.firestore();
+      const ref = db.collection('channels').doc(chan).collection('events');
+
+      sendEvent = (data) => ref.add({
+        ...data,
+        from: myId,
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      subscribeEvents = (cb) => ref.orderBy('ts').onSnapshot(snap=>{
+        snap.docChanges().forEach(ch=>{
+          if (ch.type !== 'added') return;
+          const ev = ch.doc.data();
+          if (ev.from === myId) return; // evita eco
+          cb(ev);
+        });
+      });
+
+      console.log('[transport] Firestore');
+    } catch (e) {
+      // Fallback local (misma máquina/navegador)
       const bc = new BroadcastChannel(chan);
       sendEvent = (d)=> bc.postMessage(d);
-      subscribeEvents = (cb)=> bc.onmessage=(e)=> cb(e.data);
-      console.log('[transport] BroadcastChannel');
+      subscribeEvents = (cb)=> bc.onmessage = (e)=> cb(e.data);
+      console.log('[transport] BroadcastChannel', e?.message || e);
     }
   })();
 </script>
+
 
 <script>
   // ==== Modal constructor ====
